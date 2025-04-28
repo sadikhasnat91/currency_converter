@@ -1,0 +1,65 @@
+name: "Build & Release"
+
+on:
+  pull_request:
+    branches:
+      - main
+      - master
+  push:
+    branches:
+      - main
+      - master
+      - develop
+
+jobs:
+  build:
+    runs-on: macos-latest
+    permissions:
+      contents: write  # Allows pushing release assets
+      id-token: write  # Required for GitHub App authentication (if used)
+
+    steps:
+      # Checkout the code
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      # Set up Java (needed for Android builds)
+      - name: Set up Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      # Set up Flutter
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          architecture: x64
+
+      # Install dependencies
+      - name: Install Flutter dependencies
+        run: flutter pub get
+
+      # Build Android APK (split per ABI)
+      - name: Build Android APK (release)
+        run: flutter build apk --release --split-per-abi
+
+      # Build iOS IPA (no code signing)
+      - name: Build iOS IPA (no codesign)
+        run: |
+          flutter build ios --no-codesign
+          cd build/ios/iphoneos
+          mkdir Payload
+          cp -r Runner.app Payload/
+          zip -r app.ipa Payload
+
+      # Upload to GitHub Releases
+      - name: Push to GitHub Releases
+        uses: ncipollo/release-action@v1
+        with:
+          artifacts: |
+            build/app/outputs/apk/release/*.apk,
+            build/ios/iphoneos/app.ipa
+          tag: v1.2.${{ github.run_number }}
+          token: ${{ secrets.CURRENCY }}
